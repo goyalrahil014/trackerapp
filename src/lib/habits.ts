@@ -6,6 +6,13 @@ const LOCAL_HABITS_KEY = 'habitflow_local_habits';
 const LOCAL_LOGS_KEY = 'habitflow_local_logs';
 
 /**
+ * Check if the user ID corresponds to a local demo session
+ */
+export function isDemoUserId(userId: string): boolean {
+  return !userId || userId.startsWith('demo-') || userId.startsWith('local-');
+}
+
+/**
  * Helper to get local data from localStorage
  */
 function getLocalHabits(userId: string): Habit[] {
@@ -148,7 +155,7 @@ export function seedSampleDataIfEmpty(userId: string): { habits: Habit[]; logs: 
  * Fetch active habits for user
  */
 export async function fetchHabits(userId: string): Promise<Habit[]> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { data, error } = await supabase
       .from('habits')
       .select('*')
@@ -171,7 +178,7 @@ export async function fetchHabits(userId: string): Promise<Habit[]> {
  * Fetch archived (soft-deleted) habits
  */
 export async function fetchArchivedHabits(userId: string): Promise<Habit[]> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { data, error } = await supabase
       .from('habits')
       .select('*')
@@ -194,7 +201,7 @@ export async function fetchArchivedHabits(userId: string): Promise<Habit[]> {
  * Fetch habit logs for the last 30 days
  */
 export async function fetchHabitLogs(userId: string, startDate: string): Promise<HabitLog[]> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { data, error } = await supabase
       .from('habit_logs')
       .select('*')
@@ -218,7 +225,7 @@ export async function fetchHabitLogs(userId: string, startDate: string): Promise
 export async function createHabit(userId: string, data: HabitFormData): Promise<Habit> {
   const trimmedName = data.name.trim();
 
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { data: existing } = await supabase
       .from('habits')
       .select('id')
@@ -285,7 +292,7 @@ export async function updateHabit(
   habitId: string,
   data: Partial<HabitFormData>
 ): Promise<Habit> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const updatePayload: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
@@ -334,7 +341,7 @@ export async function updateHabit(
  * Soft delete (archive) habit
  */
 export async function archiveHabit(userId: string, habitId: string): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { error } = await supabase
       .from('habits')
       .update({ active: false, updated_at: new Date().toISOString() })
@@ -360,7 +367,7 @@ export async function archiveHabit(userId: string, habitId: string): Promise<voi
  * Restore archived habit
  */
 export async function restoreHabit(userId: string, habitId: string): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { error } = await supabase
       .from('habits')
       .update({ active: true, updated_at: new Date().toISOString() })
@@ -391,7 +398,7 @@ export async function setHabitLog(
   date: string,
   status: LogStatus
 ): Promise<HabitLog> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { data, error } = await supabase
       .from('habit_logs')
       .upsert(
@@ -447,7 +454,7 @@ export async function deleteHabitLog(
   habitId: string,
   date: string
 ): Promise<void> {
-  if (isSupabaseConfigured() && supabase) {
+  if (isSupabaseConfigured() && supabase && !isDemoUserId(userId)) {
     const { error } = await supabase
       .from('habit_logs')
       .delete()

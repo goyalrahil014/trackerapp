@@ -10,9 +10,11 @@ export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEmailNotConfirmed, setIsEmailNotConfirmed] = useState(false);
 
-  const { signIn, isSecretKey } = useAuth();
+  const { signIn, isSecretKey, loginAsDemo, resendConfirmationEmail } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,13 +31,37 @@ export const Login: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setIsEmailNotConfirmed(false);
       await signIn(email, password);
       toast.success('Welcome back!');
       navigate(from, { replace: true });
     } catch (err: any) {
-      setError(err?.message || 'Invalid email or password.');
+      const msg = err?.message || 'Invalid email or password.';
+      if (msg.toLowerCase().includes('email not confirmed')) {
+        setIsEmailNotConfirmed(true);
+        setError(null);
+      } else {
+        setIsEmailNotConfirmed(false);
+        setError(msg);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) {
+      toast.error('Please enter your email above first.');
+      return;
+    }
+    try {
+      setResending(true);
+      await resendConfirmationEmail(email);
+      toast.success(`Confirmation email sent to ${email}! Please check your inbox or spam folder.`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to resend confirmation email.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -43,11 +69,12 @@ export const Login: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      await signIn('alex@habitflow.app', 'demo123456');
+      setIsEmailNotConfirmed(false);
+      await loginAsDemo();
       toast.success('Logged in as Alex Morgan (Demo)');
       navigate('/dashboard', { replace: true });
-    } catch {
-      setError('Could not initialize demo login.');
+    } catch (err: any) {
+      setError(err?.message || 'Could not initialize demo login.');
     } finally {
       setLoading(false);
     }
@@ -87,6 +114,48 @@ export const Login: React.FC = () => {
             <p className="font-medium text-[11px] text-amber-800 dark:text-amber-300">
               To fix: Go to Supabase Dashboard &rarr; <strong>Project Settings</strong> &rarr; <strong>API</strong> &rarr; copy the <strong>anon public</strong> key into your <code>.env</code>.
             </p>
+          </div>
+        )}
+
+        {isEmailNotConfirmed && (
+          <div className="mb-5 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 text-xs space-y-2.5">
+            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300 text-sm">
+              <Mail className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              Email Not Confirmed
+            </div>
+            <p className="leading-relaxed">
+              Supabase has email confirmation enabled by default. To sign in right now:
+            </p>
+            <div className="space-y-2 bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-amber-500/20">
+              <div>
+                <span className="font-bold text-slate-900 dark:text-white">Option 1 (Fastest — 10 seconds):</span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  Go to Supabase Dashboard &rarr; <strong>Authentication</strong> &rarr; <strong>Users</strong> &rarr; click <strong>...</strong> next to <code className="text-indigo-600 dark:text-indigo-400">{email || 'your email'}</code> &rarr; select <strong>"Confirm email"</strong>.
+                </p>
+              </div>
+              <div className="pt-1 border-t border-amber-500/10">
+                <span className="font-bold text-slate-900 dark:text-white">Option 2 (Inbox link):</span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  Check your email inbox or spam folder for the Supabase confirmation link.
+                </p>
+              </div>
+              <div className="pt-1 border-t border-amber-500/10">
+                <span className="font-bold text-slate-900 dark:text-white">Option 3 (Auto-confirm future signups):</span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  In Supabase Dashboard &rarr; <strong>Authentication</strong> &rarr; <strong>Providers</strong> &rarr; <strong>Email</strong> &rarr; toggle OFF <strong>"Confirm email"</strong>.
+                </p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+              >
+                {resending ? 'Sending...' : 'Resend Confirmation Email'}
+              </button>
+            </div>
           </div>
         )}
 

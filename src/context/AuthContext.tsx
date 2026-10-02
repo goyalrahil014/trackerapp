@@ -9,9 +9,11 @@ interface AuthContextType {
   isCloudConnected: boolean;
   isSecretKey: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<{ requiresConfirmation: boolean }>;
+  loginAsDemo: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfileName: (name: string) => Promise<void>;
+  resendConfirmationEmail: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,7 +77,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               await fetchProfileFromSupabase(session.user.id, u.name, u.email);
             }
           } else {
-            if (mounted) {
+            // If no active cloud session, check if a demo session was stored
+            const savedUser = localStorage.getItem(LOCAL_USER_KEY);
+            const savedProfile = localStorage.getItem(LOCAL_PROFILE_KEY);
+            if (savedUser && mounted) {
+              try {
+                const parsed = JSON.parse(savedUser);
+                if (parsed?.id?.startsWith('demo-')) {
+                  setUser(parsed);
+                  if (savedProfile) setProfile(JSON.parse(savedProfile));
+                } else {
+                  setUser(null);
+                  setProfile(null);
+                }
+              } catch {
+                setUser(null);
+                setProfile(null);
+              }
+            } else if (mounted) {
               setUser(null);
               setProfile(null);
             }
@@ -190,7 +209,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string
+  ): Promise<{ requiresConfirmation: boolean }> => {
     const trimmedName = name.trim();
     if (isCloudConnected && supabase) {
       const { data, error } = await supabase.auth.signUp({
@@ -207,7 +230,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error(error.message || 'Failed to sign up');
       }
 
-      if (data.user) {
+      // If Supabase has email confirmation enabled, data.session will be null
+      if (data.user && !data.session) {
+        return { requiresConfirmation: true };
+      }
+
+      if (data.user && data.session) {
         const u: UserSession = {
           id: data.user.id,
           email: data.user.email || '',
@@ -224,7 +252,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: u.name,
           email: u.email,
         });
+        return { requiresConfirmation: false };
       }
+      return { requiresConfirmation: false };
     } else {
       const localId = `user-${Date.now()}`;
       const u: UserSession = { id: localId, email, name: trimmedName || 'User' };
@@ -234,15 +264,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(p);
       localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(u));
       localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(p));
+      return { requiresConfirmation: false };
+    }
+  };
+
+  const loginAsDemo = async () => {
+    try {
+      if (isCloudConnected && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch {
+      // Ignore
+    }
+    const demoUser: UserSession = {
+      id: 'demo-user-1',
+      email: 'alex@habitflow.app',
+      name: 'Alex Morgan',
+    };
+    const demoProfile: Profile = {
+      id: demoUser.id,
+      name: demoUser.name,
+      email: demoUser.email,
+      created_at: new Date().toISOString(),
+    };
+    setUser(demoUser);
+    setProfile(demoProfile);
+    localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(demoUser));
+    localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify(demoProfile));
+  };
+
+  const resendConfirmationEmail = async (email: string) => {
+    if (isCloudConnected && supabase) {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+      });
+      if (error) {
+        throw new Error(error.message || 'Failed to resend confirmation email');
+      }
     }
   };
 
   const signOut = async () => {
+    localStorage.removeItem(LOCAL_USER_KEY);
+    localStorage.removeItem(LOCAL_PROFILE_KEY);
     if (isCloudConnected && supabase) {
-      await supabase.auth.signOut();
-    } else {
-      localStorage.removeItem(LOCAL_USER_KEY);
-      localStorage.removeItem(LOCAL_PROFILE_KEY);
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Supabase signOut error', err);
+      }
     }
     setUser(null);
     setProfile(null);
@@ -289,8 +360,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSecretKey,
         signIn,
         signUp,
+        loginAsDemo,
         signOut,
         updateProfileName,
+        resendConfirmationEmail,
       }}
     >
       {children}
